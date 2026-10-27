@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Mid-Poly Симуляция: Живой Хутор</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #141915;
+            user-select: none;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(10, 16, 11, 0.94);
+            color: #e2e8e3;
+            padding: 22px;
+            border-radius: 14px;
+            max-width: 350px;
+            box-shadow: 0 10px 35px rgba(0,0,0,0.75);
+            border: 1px solid rgba(255,255,255,0.07);
+            pointer-events: auto;
+            z-index: 10;
+            transition: all 0.3s ease;
+        }
+
+        #ui-overlay.collapsed {
+            max-width: 240px;
+            padding-bottom: 12px;
+        }
+
+        #toggle-menu-btn {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            background: #33691e;
+            color: #ffffff;
+            border: none;
+            padding: 4px 10px;
+            font-size: 11px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: bold;
+        }
+
+        #toggle-menu-btn:hover {
+            background: #558b2f;
+        }
+
+        .overlay-content {
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+            max-height: 600px;
+            opacity: 1;
+            overflow: hidden;
+        }
+
+        #ui-overlay.collapsed .overlay-content {
+            max-height: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 17px;
+            margin: 0 0 4px 0;
+            color: #aed581;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            padding-right: 80px;
+        }
+
+        .job-title {
+            display: inline-block;
+            font-size: 11px;
+            background: #33691e;
+            color: #ffffff;
+            padding: 3px 10px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: 10px;
+        }
+
+        .narrative-box {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #b0bec5;
+            background: rgba(255,255,255,0.03);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            border-left: 4px solid #9ccc65;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .controls-info {
+            font-size: 11px;
+            color: #78909c;
+            margin-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            padding-top: 10px;
+        }
+
+        .animation-selector {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        button.anim-btn {
+            background: #1b221c;
+            color: #b0b0b0;
+            border: 1px solid #2e3b2f;
+            padding: 7px;
+            font-size: 11px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button.anim-btn:hover {
+            background: #9ccc65;
+            color: #0b140c;
+            border-color: #9ccc65;
+        }
+
+        button.anim-btn.active {
+            background: #aed581;
+            color: #050a06;
+            font-weight: bold;
+            border-color: #aed581;
+            box-shadow: 0 0 10px rgba(174,213,129,0.3);
+        }
+
+        #status-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(8, 12, 9, 0.85);
+            color: #cfd8dc;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 10;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-overlay">
+        <button id="toggle-menu-btn" onclick="toggleMenu()">Свернуть</button>
+        <h1>Логистика х. «Ольховка»</h1>
+        
+        <div class="overlay-content">
+            <div class="job-title" id="current-task-badge">Хозяйственный выезд</div>
+            <div class="narrative-box" id="narrative-text">
+                Запуск симуляции. Иван снарядил коня Грома для выполнения планового логистического обхода и снабжения ремесленных узлов.
+            </div>
+            
+            <div style="font-size: 11px; margin-bottom: 4px; color: #aed581; font-weight: bold;">Аллюр и режимы Грома:</div>
+            <div class="animation-selector" id="horse-anims"></div>
+
+            <div class="controls-info">
+                <strong>Управление (Вид Сверху):</strong><br>
+                • ЛКМ + Перетаскивание — вращение камеры вокруг цели<br>
+                • Колёсико мыши — плавный масштаб (зум)<br>
+                • Объекты обладают физической твердостью и объемом
+            </div>
+        </div>
+    </div>
+
+    <div id="status-bar">
+        Статус: <span style="color: #aed581; font-weight:bold;">Коллизии и обход препятствий активны</span> • 9 жителей обходят пропсы
+    </div>
+
+    <script>
+        let scene, camera, renderer, container;
+        let clock = new THREE.Clock();
+        
+        let camRadius = 48;
+        let camTheta = Math.PI / 3;  
+        let camPhi = Math.PI / 5; 
+        let isMouseDown = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        // Сущности
+        let mainGroup; 
+        let horseMesh, companionMesh, leadRopeMesh;
+        let villagers = [];
+        
+        // Массив твердых объектов для обсчета физики столкновений
+        let collisionObstacles = [];
+
+        // Скорректированный логистический маршрут (точки перемещены в дворики, исключая спавн внутри стен)
+        let supplyRoute = [
+            { pos: new THREE.Vector3(-30, 0, -30), wait: 3, zone: "Северные Ворота", story: "Иван начинает снабженческий рейс от ворот хутора. Проверяется готовность упряжи." },
+            { pos: new THREE.Vector3(14, 0, -18),  wait: 5, zone: "Зерновой Амбар",  story: "Остановка у Амбара. Иван отгружает зерно. Амбарщик Фёдор принимает мешки для учета." },
+            { pos: new THREE.Vector3(0, 0, -25),   wait: 4, zone: "Мельница",        story: "Доставка сырья на Мельницу. Мельник Михаил подготавливает жернова к помолу новой партии." },
+            { pos: new THREE.Vector3(18, 0, 20),   wait: 4, zone: "Птичий Загон",    story: "Доставка фуражного корма Елене на птичник. Птицы сбегаются к кормушкам." },
+            { pos: new THREE.Vector3(-14, 0, 18),  wait: 5, zone: "Главная Изба",    story: "Подъезд к жилой усадьбе. Передача провизии и чистой воды хозяйке Ольге." },
+            { pos: new THREE.Vector3(-12, 0, -20), wait: 6, zone: "Кузнечный Двор",  story: "Конечная точка: Кузница. Blacksmith Пётр осматривает копыта Грома перед следующей поездкой." }
+        ];
+        let currentRouteIdx = 0;
+        let mainGroupSpeed = 3.6;
+        let routeWaitTimer = 0;
+        let isWaiting = false;
+
+        const animList = ["Шаг", "Рысь", "Галоп", "Выпас", "Ожидание", "Дыбы", "Поклон", "Прыжок", "Хвост", "Сон"];
+        let activeAnim = "Шаг";
+
+        let materials = {};
+
+        window.onload = function() {
+            init();
+            buildVillageEnvironment();
+            spawnVillagePopulation();
+            setupCameraInteractions();
+            animate();
+        };
+
+        function toggleMenu() {
+            const overlay = document.getElementById('ui-overlay');
+            const btn = document.getElementById('toggle-menu-btn');
+            if (overlay.classList.contains('collapsed')) {
+                overlay.classList.remove('collapsed');
+                btn.innerText = 'Свернуть';
+            } else {
+                overlay.classList.add('collapsed');
+                btn.innerText = 'Развернуть';
+            }
+        }
+
+        function init() {
+            container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x131814);
+            scene.fog = new THREE.FogExp2(0x131814, 0.01);
+
+            camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 1, 1000);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            const sun = new THREE.DirectionalLight(0xfffae3, 0.95);
+            sun.position.set(70, 110, 50);
+            sun.castShadow = true;
+            sun.shadow.mapSize.set(2048, 2048);
+            const d = 70;
+            sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
+            sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
+            scene.add(sun);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            materials.ground = new THREE.MeshStandardMaterial({ color: 0x2d3a2f, roughness: 0.95, flatShading: true });
+            materials.road = new THREE.MeshStandardMaterial({ color: 0x443930, roughness: 1.0, flatShading: true });
+            materials.woodDark = new THREE.MeshStandardMaterial({ color: 0x3d2d22, roughness: 0.9, flatShading: true });
+            materials.woodLight = new THREE.MeshStandardMaterial({ color: 0x735743, roughness: 0.85, flatShading: true });
+            materials.roof = new THREE.MeshStandardMaterial({ color: 0xa02d18, roughness: 0.65, flatShading: true });
+            materials.skin = new THREE.MeshStandardMaterial({ color: 0xffd1a4, roughness: 0.6, flatShading: true });
+            materials.iron = new THREE.MeshStandardMaterial({ color: 0x4f5d65, metalness: 0.4, roughness: 0.4, flatShading: true });
+            materials.hay = new THREE.MeshStandardMaterial({ color: 0xdf9510, roughness: 0.9, flatShading: true });
+            materials.leaves = new THREE.MeshStandardMaterial({ color: 0x335c38, roughness: 0.85, flatShading: true });
+            materials.fireGlow = new THREE.MeshStandardMaterial({ color: 0xff5722, emissive: 0xff3d00, flatShading: true });
+            materials.windowGold = new THREE.MeshStandardMaterial({ color: 0xffca28, emissive: 0xffa000, flatShading: true });
+
+            const animBox = document.getElementById('horse-anims');
+            animList.forEach(anim => {
+                const btn = document.createElement('button');
+                btn.className = 'anim-btn';
+                btn.innerText = anim;
+                if(anim === activeAnim) btn.classList.add('active');
+                btn.onclick = () => {
+                    document.querySelectorAll('#horse-anims button').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    activeAnim = anim;
+                    isWaiting = false;
+                };
+                animBox.appendChild(btn);
+            });
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function createMidPolyJoint(parent, geometry, material, positionOffset, initialRot = [0,0,0]) {
+            const jointPivot = new THREE.Group();
+            jointPivot.position.copy(positionOffset);
+            parent.add(jointPivot);
+
+            const segmentMesh = new THREE.Mesh(geometry, material);
+            segmentMesh.castShadow = true;
+            segmentMesh.receiveShadow = true;
+            segmentMesh.rotation.set(initialRot[0], initialRot[1], initialRot[2]);
+            jointPivot.add(segmentMesh);
+
+            let radius = geometry.parameters.radiusTop !== undefined ? geometry.parameters.radiusTop : geometry.parameters.width * 0.5;
+            if(radius > 0) {
+                const jointCap = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.03, 8, 8), material);
+                jointPivot.add(jointCap);
+            }
+            return { pivot: jointPivot, mesh: segmentMesh };
+        }
+
+        function buildMidPolyHuman(clothColorHex) {
+            const humanGroup = new THREE.Group();
+            const clothMat = new THREE.MeshStandardMaterial({ color: clothColorHex, roughness: 0.7, flatShading: true });
+
+            const pelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.35, 0.3, 7), clothMat);
+            pelvis.position.y = 1.8;
+            pelvis.castShadow = true;
+            humanGroup.add(pelvis);
+
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.35, 1.0, 6), clothMat);
+            torso.position.y = 0.65;
+            torso.castShadow = true;
+            pelvis.add(torso);
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.48, 0.48), materials.skin);
+            head.position.y = 0.75;
+            head.castShadow = true;
+            torso.add(head);
+
+            const legGeo = new THREE.CylinderGeometry(0.14, 0.11, 0.9, 6);
+            const leftLeg = createMidPolyJoint(pelvis, legGeo, clothMat, new THREE.Vector3(-0.18, -0.15, 0));
+            const rightLeg = createMidPolyJoint(pelvis, legGeo, clothMat, new THREE.Vector3(0.18, -0.15, 0));
+            leftLeg.mesh.position.y = -0.45;
+            rightLeg.mesh.position.y = -0.45;
+
+            const armGeo = new THREE.CylinderGeometry(0.11, 0.09, 0.8, 6);
+            const leftArm = createMidPolyJoint(torso, armGeo, clothMat, new THREE.Vector3(-0.48, 0.3, 0));
+            const rightArm = createMidPolyJoint(torso, armGeo, clothMat, new THREE.Vector3(0.48, 0.3, 0));
+            leftArm.mesh.position.y = -0.4;
+            rightArm.mesh.position.y = -0.4;
+
+            const toolHolder = new THREE.Group();
+            toolHolder.position.set(0, -0.45, 0.1);
+            rightArm.pivot.add(toolHolder);
+
+            humanGroup.userData = { leftLeg, rightLeg, leftArm, rightArm, torso, head, toolHolder, walkTimer: 0, currentWP: 0, activityState: "IDLE" };
+            return humanGroup;
+        }
+
+        function buildMidPolyHorse() {
+            const horseGroup = new THREE.Group();
+            const horseBodyMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.65, flatShading: true }); 
+            const maneMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8, flatShading: true });
+
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.1, 2.2), horseBodyMat);
+            torso.position.y = 2.2;
+            torso.castShadow = true;
+            horseGroup.add(torso);
+
+            const neckBase = new THREE.Group();
+            neckBase.position.set(0, 0.35, 1.0);
+            torso.add(neckBase);
+
+            const neck = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.1, 0.55), horseBodyMat);
+            neck.position.set(0, 0.45, 0.15);
+            neck.rotation.x = Math.PI / 5; 
+            neckBase.add(neck);
+
+            const mane = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.0, 0.2), maneMat);
+            mane.position.set(0, 0, -0.3);
+            neck.add(mane);
+
+            const headJoint = new THREE.Group();
+            headJoint.position.set(0, 0.95, 0.3);
+            neckBase.add(headJoint);
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.46, 0.85), horseBodyMat);
+            head.position.set(0, 0, 0.25);
+            head.rotation.x = -Math.PI / 6;
+            headJoint.add(head);
+
+            const earL = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.25, 4), horseBodyMat);
+            earL.position.set(-0.16, 0.25, 0); earL.rotation.x = Math.PI/10; head.add(earL);
+            const earR = earL.clone(); earR.position.x = 0.16; head.add(earR);
+
+            const upperLegGeo = new THREE.CylinderGeometry(0.18, 0.14, 1.0, 6);
+            const lowerLegGeo = new THREE.CylinderGeometry(0.14, 0.11, 1.0, 6);
+            const hoofGeo = new THREE.BoxGeometry(0.22, 0.15, 0.26);
+
+            function attachHorseLeg(offsetX, offsetZ) {
+                const legRoot = new THREE.Group();
+                legRoot.position.set(offsetX, -0.55, offsetZ);
+                torso.add(legRoot);
+
+                const upperSegment = createMidPolyJoint(legRoot, upperLegGeo, horseBodyMat, new THREE.Vector3(0, -0.5, 0));
+                const lowerSegment = createMidPolyJoint(upperSegment.pivot, lowerLegGeo, horseBodyMat, new THREE.Vector3(0, -1.0, 0));
+                
+                const hoof = new THREE.Mesh(hoofGeo, materials.iron);
+                hoof.position.set(0, -0.52, 0.02);
+                hoof.castShadow = true;
+                lowerSegment.pivot.add(hoof);
+
+                return { root: legRoot, upper: upperSegment.pivot, lower: lowerSegment.pivot };
+            }
+
+            const legFL = attachHorseLeg(-0.32, 0.75);
+            const legFR = attachHorseLeg(0.32, 0.75);
+            const legBL = attachHorseLeg(-0.32, -0.75);
+            const legBR = attachHorseLeg(0.32, -0.75);
+
+            const tailJoint = new THREE.Group();
+            tailJoint.position.set(0, 0.3, -1.1);
+            const tailMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, 1.1, 5), maneMat);
+            tailMesh.position.y = -0.45; tailMesh.rotation.x = -Math.PI / 10;
+            tailJoint.add(tailMesh);
+            torso.add(tailJoint);
+
+            horseGroup.userData = { torso, neck: neckBase, head: headJoint, tail: tailJoint, legFL, legFR, legBL, legBR };
+            return horseGroup;
+        }
+
+        function spawnVillagePopulation() {
+            mainGroup = new THREE.Group();
+            scene.add(mainGroup);
+
+            horseMesh = buildMidPolyHorse();
+            mainGroup.add(horseMesh);
+
+            companionMesh = buildMidPolyHuman(0x1a237e); 
+            companionMesh.position.set(-1.4, 0, 0.6);
+            mainGroup.add(companionMesh);
+
+            const ropeGeo = new THREE.CylinderGeometry(0.02, 0.02, 1.5, 4);
+            leadRopeMesh = new THREE.Mesh(ropeGeo, materials.woodDark);
+            leadRopeMesh.rotation.z = Math.PI / 2.5;
+            leadRopeMesh.position.set(-0.7, 1.6, 1.2);
+            mainGroup.add(leadRopeMesh);
+
+            // Логически скорректированные пути патрулей жителей, проходящие в обход стен
+            const villagerRoles = [
+                { color: 0x2c3e50, waypoints: [new THREE.Vector3(-28, 0, -24), new THREE.Vector3(-14, 0, -24), new THREE.Vector3(-25, 0, 0)], role: "GUARD", tool: "SPEAR" },
+                { color: 0xd35400, waypoints: [new THREE.Vector3(-24, 0, -15), new THREE.Vector3(-15, 0, -15)], role: "BLACKSMITH", tool: "HAMMER" },
+                { color: 0xc2185b, waypoints: [new THREE.Vector3(-14, 0, 22), new THREE.Vector3(0, 0, 3)], role: "HOUSEWIFE", tool: "BUCKETS" },
+                { color: 0x00796b, waypoints: [new THREE.Vector3(20, 0, 24), new THREE.Vector3(30, 0, 18)], role: "POULTRY", tool: "BASKET" },
+                { color: 0xe67e22, waypoints: [new THREE.Vector3(18, 0, -18), new THREE.Vector3(24, 0, -12)], role: "STOREKEEPER", tool: "SACK" },
+                { color: 0x6a1b9a, waypoints: [new THREE.Vector3(-5, 0, -36), new THREE.Vector3(5, 0, -36)], role: "MILLER", tool: "WRENCH" },
+                { color: 0x1b5e20, waypoints: [new THREE.Vector3(8, 0, -8), new THREE.Vector3(16, 0, -8)], role: "MOWER", tool: "SCYTHE" },
+                { color: 0x4e342e, waypoints: [new THREE.Vector3(-11, 0, -2), new THREE.Vector3(-7, 0, -5)], role: "CARPENTER", tool: "SAW" },
+                { color: 0xf1c40f, waypoints: [new THREE.Vector3(8, 0, 14), new THREE.Vector3(14, 0, 8)], role: "HERBALIST", tool: "NONE" }
+            ];
+
+            villagerRoles.forEach((roleCfg) => {
+                const villager = buildMidPolyHuman(roleCfg.color);
+                villager.position.copy(roleCfg.waypoints[0]);
+                villager.userData.waypoints = roleCfg.waypoints;
+                villager.userData.role = roleCfg.role;
+                villager.userData.activityState = "WALKING";
+                villager.userData.speed = 1.3 + Math.random() * 0.3;
+
+                equipTool(villager.userData.toolHolder, roleCfg.tool);
+
+                scene.add(villager);
+                villagers.push(villager);
+            });
+
+            mainGroup.position.copy(supplyRoute[0].pos);
+        }
+
+        function equipTool(holder, toolType) {
+            if(toolType === "NONE") return;
+            let toolMesh;
+            
+            if(toolType === "HAMMER") {
+                const group = new THREE.Group();
+                const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 4), materials.woodDark);
+                handle.position.y = 0.15; handle.rotation.x = Math.PI/2; group.add(handle);
+                const head = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.2), materials.iron);
+                head.position.set(0, 0.35, 0); group.add(head);
+                toolMesh = group;
+            } else if(toolType === "SCYTHE") {
+                const group = new THREE.Group();
+                const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.2, 5), materials.woodLight);
+                shaft.position.y = 0.4; group.add(shaft);
+                const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.5, 0.08), materials.iron);
+                blade.position.set(0, 0.9, 0.2); blade.rotation.x = Math.PI/4; group.add(blade);
+                toolMesh = group;
+            } else if(toolType === "SACK") {
+                toolMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.5, 6), materials.woodLight);
+                toolMesh.position.set(0, 0.1, 0.15);
+            } else if(toolType === "SAW") {
+                toolMesh = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.4, 0.1), materials.iron);
+                toolMesh.position.set(0, 0.2, 0);
+            } else {
+                toolMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.09, 0.3, 5), materials.iron);
+                toolMesh.position.set(0, -0.1, 0);
+            }
+
+            holder.add(toolMesh);
+        }
+
+        // Алгоритм скольжения и выталкивания при столкновениях с твердыми телами окружения
+        function resolveCollisions(entity, bodyRadius) {
+            collisionObstacles.forEach(obs => {
+                let dx = entity.position.x - obs.x;
+                let dz = entity.position.z - obs.z;
+                let dist = Math.sqrt(dx * dx + dz * dz);
+                let minDist = obs.r + bodyRadius;
+                
+                if (dist < minDist) {
+                    if (dist === 0) {
+                        dx = 0.1 * (Math.random() - 0.5);
+                        dz = 0.1 * (Math.random() - 0.5);
+                        dist = Math.sqrt(dx * dx + dz * dz);
+                    }
+                    // Вычисление величины наложения геометрических объемов
+                    let overlap = minDist - dist;
+                    // Коррекция позиции вдоль вектора нормали столкновения (эффект плавного огибания/скольжения)
+                    entity.position.x += (dx / dist) * overlap;
+                    entity.position.z += (dz / dist) * overlap;
+                }
+            });
+        }
+
+        function addDecorProps() {
+            const treePositions = [
+                {x: -35, z: -10}, {x: -28, z: 5}, {x: -40, z: 25}, {x: -22, z: 40},
+                {x: 15, z: 40}, {x: 35, z: 5}, {x: 38, z: -35}, {x: 18, z: -40},
+                {x: -15, z: -42}, {x: -5, z: -15}, {x: 12, z: 12}
+            ];
+
+            treePositions.forEach(p => {
+                const treeGroup = new THREE.Group();
+                treeGroup.position.set(p.x, 0, p.z);
+                
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.3, 2.0, 5), materials.woodDark);
+                trunk.position.y = 1.0; trunk.castShadow = true; treeGroup.add(trunk);
+
+                const leavesGeo = new THREE.ConeGeometry(1.2, 2.5, 5);
+                const leaves1 = new THREE.Mesh(leavesGeo, materials.leaves);
+                leaves1.position.y = 2.4; leaves1.castShadow = true; treeGroup.add(leaves1);
+                
+                const leaves2 = new THREE.Mesh(leavesGeo, materials.leaves);
+                leaves2.position.y = 3.4; leaves2.scale.set(0.8, 0.8, 0.8); leaves2.castShadow = true; treeGroup.add(leaves2);
+
+                scene.add(treeGroup);
+                // Регистрация твердого ствола дерева в системе коллизий
+                collisionObstacles.push({ x: p.x, z: p.z, r: 0.7 });
+            });
+
+            const rockPositions = [
+                {x: -25, z: -35, s: 1.2}, {x: 10, z: 30, s: 0.8}, {x: 32, z: -10, s: 1.5}, {x: -5, z: 20, s: 0.6}
+            ];
+            rockPositions.forEach(p => {
+                const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(p.s, 0), new THREE.MeshStandardMaterial({color: 0x546e7a, roughness: 0.9, flatShading: true}));
+                rock.position.set(p.x, p.s * 0.5, p.z); rock.castShadow = true; rock.receiveShadow = true;
+                scene.add(rock);
+                // Регистрация валуна в системе коллизий
+                collisionObstacles.push({ x: p.x, z: p.z, r: p.s * 0.85 });
+            });
+        }
+
+        function buildVillageEnvironment() {
+            collisionObstacles = [];
+
+            const groundGeo = new THREE.PlaneGeometry(250, 250, 16, 16);
+            const posAttr = groundGeo.attributes.position;
+            for (let i = 0; i < posAttr.count; i++) {
+                let vx = posAttr.getX(i); let vy = posAttr.getY(i);
+                if (Math.abs(vx) > 10 || Math.abs(vy) > 10) {
+                    posAttr.setZ(i, Math.sin(vx * 0.08) * Math.cos(vy * 0.08) * 1.5);
+                }
+            } groundGeo.computeVertexNormals();
+            
+            const ground = new THREE.Mesh(groundGeo, materials.ground);
+            ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+            scene.add(ground);
+
+            for (let i = 0; i < supplyRoute.length; i++) {
+                const src = supplyRoute[i].pos; const dest = supplyRoute[(i + 1) % supplyRoute.length].pos;
+                const d = src.distanceTo(dest);
+                const roadSeg = new THREE.Mesh(new THREE.PlaneGeometry(3.8, d + 0.5), materials.road);
+                const middle = new THREE.Vector3().addVectors(src, dest).multiplyScalar(0.5);
+                roadSeg.position.set(middle.x, 0.015, middle.z);
+                roadSeg.rotation.x = -Math.PI / 2;
+                roadSeg.rotation.z = -Math.atan2(dest.z - src.z, dest.x - src.x) + Math.PI / 2;
+                roadSeg.receiveShadow = true;
+                scene.add(roadSeg);
+            }
+
+            buildingsData.forEach((b) => {
+                const houseGroup = new THREE.Group();
+                houseGroup.position.set(b.x, 0, b.z);
+
+                const walls = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), new THREE.MeshStandardMaterial({ color: b.col, roughness: 0.85, flatShading: true }));
+                walls.position.y = b.h / 2; walls.castShadow = true; walls.receiveShadow = true;
+                houseGroup.add(walls);
+
+                const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(b.w, b.d) * 0.85, 3.2, 4), new THREE.MeshStandardMaterial({ color: b.rCol, flatShading: true }));
+                roof.position.y = b.h + 1.6; roof.rotation.y = Math.PI / 4; roof.castShadow = true;
+                houseGroup.add(roof);
+
+                const winGeo = new THREE.BoxGeometry(0.1, 0.8, 0.6);
+                const window1 = new THREE.Mesh(winGeo, materials.windowGold);
+                window1.position.set(b.w/2 + 0.02, b.h * 0.55, 0); houseGroup.add(window1);
+
+                if(b.name === "Кузница") {
+                    const anvilBase = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.4), materials.woodDark);
+                    anvilBase.position.set(2, 0.25, 2); anvilBase.castShadow = true; houseGroup.add(anvilBase);
+                    const anvilTop = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.3), materials.iron);
+                    anvilTop.position.set(2, 0.65, 2); anvilTop.castShadow = true; houseGroup.add(anvilTop);
+                    
+                    const forgeFurnace = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 1.2), materials.woodDark);
+                    forgeFurnace.position.set(-2, 0.5, 1.8); forgeFurnace.castShadow = true; houseGroup.add(forgeFurnace);
+                    const fireCube = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.6), materials.fireGlow);
+                    fireCube.position.set(-2, 0.8, 1.8); houseGroup.add(fireCube);
+                }
+
+                if(b.name === "Главная Изба") {
+                    const porch = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 1.2), materials.woodLight);
+                    porch.position.set(0, 0.2, b.d/2 + 0.6); porch.castShadow = true; houseGroup.add(porch);
+                    
+                    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.5, 0.5), materials.iron);
+                    chimney.position.set(-b.w/3, b.h + 1.0, -b.d/4); chimney.castShadow = true; houseGroup.add(chimney);
+                }
+
+                if(b.name === "Зерновой Амбар") {
+                    for(let i=0; i<3; i++) {
+                        const crate = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), materials.woodLight);
+                        crate.position.set(-b.w/2 - 1.2, 0.3, -1.0 + i*0.8); crate.castShadow = true; houseGroup.add(crate);
+                    }
+                    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.8, 6), materials.woodDark);
+                    barrel.position.set(-b.w/2 - 1.2, 0.4, 1.5); barrel.castShadow = true; houseGroup.add(barrel);
+                }
+
+                if(b.name === "Птичий Загон") {
+                    for(let i=0; i<5; i++) {
+                        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 4), materials.woodDark);
+                        post.position.set(-b.w/2 - 1.5, 0.5, -b.d/2 + i*1.3); post.castShadow = true; houseGroup.add(post);
+                    }
+                }
+
+                if(b.name === "Ветряная мельница") {
+                    const wheelGroup = new THREE.Group();
+                    wheelGroup.name = "millSails";
+                    wheelGroup.position.set(0, b.h + 0.2, b.d / 2 + 0.2);
+                    houseGroup.add(wheelGroup);
+
+                    for(let i=0; i<4; i++) {
+                        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4.2, 0.05), materials.woodLight);
+                        blade.position.y = 2.1;
+                        const pivot = new THREE.Group();
+                        pivot.rotation.z = (i * Math.PI) / 2;
+                        pivot.add(blade);
+                        wheelGroup.add(pivot);
+                    }
+                }
+                scene.add(houseGroup);
+
+                // Добавление здания как твердого тела в глобальный физический движок хутора
+                collisionObstacles.push({
+                    x: b.x,
+                    z: b.z,
+                    r: Math.max(b.w, b.d) * 0.5 + 0.5
+                });
+            });
+
+            const wellGroup = new THREE.Group();
+            wellGroup.position.set(0, 0, 0);
+            const wellRing = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.9, 6), materials.iron);
+            wellRing.position.y = 0.45; wellRing.castShadow = true; wellGroup.add(wellRing);
+            const postL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.2, 0.1), materials.woodDark);
+            postL.position.set(-1.0, 1.1, 0); postL.castShadow = true; wellGroup.add(postL);
+            const postR = postL.clone(); postR.position.x = 1.0; wellGroup.add(postR);
+            const crossbar = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.0, 4), materials.woodLight);
+            crossbar.rotation.z = Math.PI / 2; crossbar.position.y = 2.0; wellGroup.add(crossbar);
+            const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.3, 5), materials.iron);
+            bucket.position.set(0.2, 0.8, 0.4); bucket.castShadow = true; wellGroup.add(bucket);
+            scene.add(wellGroup);
+            collisionObstacles.push({ x: 0, z: 0, r: 1.4 });
+
+            const brokenCart = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 2.5), materials.woodDark);
+            brokenCart.position.set(-11, 0.4, -5); brokenCart.rotation.y = Math.PI/6;
+            scene.add(brokenCart);
+            collisionObstacles.push({ x: -11, z: -5, r: 1.6 });
+
+            for(let i=0; i<3; i++) {
+                const hay = new THREE.Mesh(new THREE.ConeGeometry(1.3, 2.0, 6), materials.hay);
+                hay.position.set(13 + i*1.6, 1.0, -5); hay.castShadow = true; scene.add(hay);
+                collisionObstacles.push({ x: 13 + i*1.6, z: -5, r: 1.0 });
+            }
+
+            addDecorProps();
+        }
+
+        function setupCameraInteractions() {
+            const dom = renderer.domElement;
+            dom.addEventListener('mousedown', (e) => {
+                if(e.button === 0) { isMouseDown = true; previousMousePosition = { x: e.clientX, y: e.clientY }; }
+            });
+
+            dom.addEventListener('mousemove', (e) => {
+                if (!isMouseDown) return;
+                const dx = e.clientX - previousMousePosition.x; const dy = e.clientY - previousMousePosition.y;
+                camTheta -= dx * 0.005; camPhi -= dy * 0.005;
+                camPhi = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, camPhi));
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+                updateCameraPosition();
+            });
+
+            window.addEventListener('mouseup', () => { isMouseDown = false; });
+            window.addEventListener('wheel', (e) => {
+                camRadius += e.deltaY * 0.045;
+                camRadius = Math.max(12, Math.min(130, camRadius));
+                updateCameraPosition();
+            }, { passive: true });
+        }
+
+        function updateCameraPosition() {
+            if(!mainGroup) return;
+            const focus = mainGroup.position;
+            camera.position.x = focus.x + camRadius * Math.sin(camPhi) * Math.sin(camTheta);
+            camera.position.y = focus.y + camRadius * Math.cos(camPhi);
+            camera.position.z = focus.z + camRadius * Math.sin(camPhi) * Math.cos(camTheta);
+            camera.lookAt(focus.x, focus.y + 1.3, focus.z);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta(); const time = clock.getElapsedTime();
+
+            scene.traverse((child) => {
+                if(child.name === "millSails") child.rotation.z += 0.4 * delta;
+            });
+
+            if (!isWaiting && ["Шаг", "Рысь", "Галоп"].includes(activeAnim)) {
+                const targetNode = supplyRoute[currentRouteIdx].pos;
+                const distToTarget = mainGroup.position.distanceTo(targetNode);
+
+                if (distToTarget < 1.2) {
+                    isWaiting = true;
+                    routeWaitTimer = supplyRoute[currentRouteIdx].wait;
+                    
+                    const currentWPInfo = supplyRoute[currentRouteIdx];
+                    document.getElementById('current-task-badge').innerText = currentWPInfo.zone;
+                    document.getElementById('narrative-text').innerText = currentWPInfo.story;
+                } else {
+                    const moveDir = new THREE.Vector3().subVectors(targetNode, mainGroup.position);
+                    moveDir.y = 0; moveDir.normalize();
+
+                    const angleY = Math.atan2(moveDir.x, moveDir.z);
+                    let diffAngle = angleY - mainGroup.rotation.y;
+                    while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
+                    while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
+                    mainGroup.rotation.y += diffAngle * 0.08;
+
+                    let speedMod = 1.0;
+                    if(activeAnim === "Рысь") speedMod = 1.9;
+                    if(activeAnim === "Галоп") speedMod = 2.9;
+
+                    mainGroup.translateZ(mainGroupSpeed * speedMod * delta);
+                    
+                    // Обсчет твердости коня и Ивана: скольжение вдоль стен при случайных отклонениях
+                    resolveCollisions(mainGroup, 1.3);
+                }
+            } else if (isWaiting) {
+                routeWaitTimer -= delta;
+                if(routeWaitTimer <= 0) {
+                    isWaiting = false;
+                    currentRouteIdx = (currentRouteIdx + 1) % supplyRoute.length;
+                }
+            }
+
+            processVillagersRoleAI(delta);
+            updateCameraPosition();
+            animateSkeletalBones(time);
+
+            renderer.render(scene, camera);
+        }
+
+        function processVillagersRoleAI(delta) {
+            villagers.forEach((v) => {
+                const ud = v.userData;
+                const currentWP = ud.waypoints[ud.currentWP];
+
+                if (ud.activityState === "WALKING") {
+                    const dist = v.position.distanceTo(currentWP);
+                    if (dist < 0.6) {
+                        ud.activityState = "WORKING";
+                        ud.walkTimer = 4.0 + Math.random() * 4.0;
+                    } else {
+                        const dir = new THREE.Vector3().subVectors(currentWP, v.position);
+                        dir.y = 0; dir.normalize();
+                        const targetRot = Math.atan2(dir.x, dir.z);
+                        
+                        let diff = targetRot - v.rotation.y;
+                        while (diff < -Math.PI) diff += Math.PI * 2;
+                        while (diff > Math.PI) diff -= Math.PI * 2;
+                        v.rotation.y += diff * 0.1;
+
+                        v.translateZ(ud.speed * delta);
+                        
+                        // Вызов обсчета твердости: жители огибают углы и стволы по касательному вектору скольжения
+                        resolveCollisions(v, 0.45);
+                    }
+                } else if (ud.activityState === "WORKING") {
+                    ud.walkTimer -= delta;
+                    // Даже в фазе работы коллизии активны (выталкивание, если пропс заспавнился вплотную)
+                    resolveCollisions(v, 0.45);
+                    
+                    if (ud.walkTimer <= 0) {
+                        ud.activityState = "WALKING";
+                        ud.currentWP = (ud.currentWP + 1) % ud.waypoints.length;
+                    }
+                }
+            });
+        }
+
+        function animateSkeletalBones(time) {
+            const h = horseMesh.userData; const c = companionMesh.userData;
+            h.torso.position.y = 2.2; h.torso.rotation.set(0,0,0); h.neck.rotation.x = 0; h.head.rotation.x = 0;
+
+            let actualAnimState = isWaiting ? "Ожидание" : activeAnim;
+
+            switch(actualAnimState) {
+                case "Шаг":
+                    let sCycle = Math.sin(time * 5);
+                    h.legFL.root.rotation.x = sCycle * 0.4; h.legFR.root.rotation.x = -sCycle * 0.4;
+                    h.legBL.root.rotation.x = -sCycle * 0.35; h.legBR.root.rotation.x = sCycle * 0.35;
+                    h.tail.rotation.y = Math.sin(time * 2) * 0.1;
+                    c.leftLeg.pivot.rotation.x = -sCycle * 0.45; c.rightLeg.pivot.rotation.x = sCycle * 0.45;
+                    c.leftArm.pivot.rotation.x = sCycle * 0.2; c.rightArm.pivot.rotation.x = -sCycle * 0.2;
+                    break;
+
+                case "Рысь":
+                    let rCycle = Math.sin(time * 9);
+                    h.legFL.root.rotation.x = rCycle * 0.55; h.legFR.root.rotation.x = -rCycle * 0.55;
+                    h.legBL.root.rotation.x = -rCycle * 0.55; h.legBR.root.rotation.x = rCycle * 0.55;
+                    h.torso.position.y += Math.abs(rCycle) * 0.12;
+                    c.leftLeg.pivot.rotation.x = -rCycle * 0.6; c.rightLeg.pivot.rotation.x = rCycle * 0.6;
+                    break;
+
+                case "Галоп":
+                    let gCycle = Math.sin(time * 12);
+                    h.legFL.root.rotation.x = gCycle * 0.75 + 0.15; h.legFR.root.rotation.x = gCycle * 0.75;
+                    h.legBL.root.rotation.x = -gCycle * 0.6 - 0.15; h.legBR.root.rotation.x = -gCycle * 0.6;
+                    h.torso.position.y += Math.sin(time * 12) * 0.25;
+                    c.leftLeg.pivot.rotation.x = -gCycle * 0.7; c.rightLeg.pivot.rotation.x = gCycle * 0.7;
+                    break;
+
+                case "Выпас": 
+                    h.neck.rotation.x = Math.PI / 4.5 + Math.sin(time * 1.5) * 0.05; h.head.rotation.x = Math.PI / 7;
+                    break;
+
+                case "Ожидание": 
+                    h.tail.rotation.y = Math.sin(time * 3) * 0.2; h.head.rotation.y = Math.cos(time * 1.2) * 0.08;
+                    c.rightArm.pivot.rotation.x = -Math.PI / 4; 
+                    break;
+
+                case "Дыбы":
+                    h.torso.position.y = 3.0; h.torso.rotation.x = -0.45;
+                    h.legFL.root.rotation.x = -0.6; h.legFR.root.rotation.x = -0.4;
+                    break;
+
+                case "Поклон":
+                    h.torso.position.y = 1.8; h.neck.rotation.x = Math.PI / 6;
+                    break;
+
+                case "Прыжок":
+                    let jVal = Math.max(0, Math.sin(time * 4) * 2.0); h.torso.position.y = 2.2 + jVal;
+                    break;
+
+                case "Хвост":
+                    h.tail.rotation.z = Math.sin(time * 22) * 0.45;
+                    break;
+
+                case "Сон":
+                    h.torso.position.y = 1.0; h.legFL.root.rotation.x = Math.PI/2; h.legFR.root.rotation.x = Math.PI/2;
+                    break;
+            }
+
+            villagers.forEach((v) => {
+                const ud = v.userData;
+                ud.leftLeg.pivot.rotation.set(0,0,0); ud.rightLeg.pivot.rotation.set(0,0,0);
+                ud.leftArm.pivot.rotation.set(0,0,0); ud.rightArm.pivot.rotation.set(0,0,0);
+                ud.torso.rotation.set(0,0,0);
+
+                if (ud.activityState === "WALKING") {
+                    let wCycle = Math.sin(time * 7 * ud.speed);
+                    ud.leftLeg.pivot.rotation.x = wCycle * 0.45; ud.rightLeg.pivot.rotation.x = -wCycle * 0.45;
+                    ud.leftArm.pivot.rotation.x = -wCycle * 0.3; ud.rightArm.pivot.rotation.x = wCycle * 0.3;
+                } else if (ud.activityState === "WORKING") {
+                    switch(ud.role) {
+                        case "GUARD": 
+                            ud.head.rotation.y = Math.sin(time * 2.5) * 0.45;
+                            break;
+                        case "BLACKSMITH": 
+                            ud.torso.rotation.x = 0.15 + Math.sin(time * 4.5) * 0.05;
+                            ud.rightArm.pivot.rotation.x = -Math.PI/3 + Math.sin(time * 4.5) * 0.6;
+                            break;
+                        case "HOUSEWIFE": 
+                            ud.torso.rotation.y = Math.sin(time * 2) * 0.3;
+                            ud.leftArm.pivot.rotation.x = -0.4; ud.rightArm.pivot.rotation.x = -0.4;
+                            break;
+                        case "POULTRY": 
+                            ud.rightArm.pivot.rotation.x = -Math.PI / 4;
+                            ud.rightArm.pivot.rotation.y = Math.sin(time * 6) * 0.4;
+                            break;
+                        case "STOREKEEPER": 
+                            ud.torso.rotation.x = 0.22;
+                            ud.leftArm.pivot.rotation.x = -0.45; ud.rightArm.pivot.rotation.x = -0.45;
+                            break;
+                        case "MILLER": 
+                            ud.head.rotation.x = 0.25 + Math.sin(time * 2) * 0.1;
+                            ud.leftArm.pivot.rotation.y = Math.sin(time * 4) * 0.3;
+                            break;
+                        case "MOWER": 
+                            let swing = Math.sin(time * 3);
+                            ud.torso.rotation.y = swing * 0.4;
+                            ud.rightArm.pivot.rotation.x = -0.3 + swing * 0.2;
+                            break;
+                        case "CARPENTER": 
+                            ud.rightArm.pivot.rotation.z = -Math.PI / 4;
+                            ud.rightArm.pivot.rotation.x = -0.2 + Math.sin(time * 7.5) * 0.35;
+                            break;
+                        case "HERBALIST": 
+                            ud.torso.rotation.x = 0.55 + Math.sin(time * 2.2) * 0.15;
+                            break;
+                    }
+                }
+            });
+        }
+
+        const buildingsData = [
+            { x: -20, z: -20, w: 6, h: 5, d: 6, col: 0x4e342e, rCol: 0xb71c1c, name: "Кузница" },
+            { x: -14, z: 28,  w: 7, h: 6, d: 7, col: 0x795548, rCol: 0x7f0000, name: "Главная Изба" },
+            { x: 26,  z: 24,  w: 5, h: 4, d: 8, col: 0xa1887f, rCol: 0x9a0007, name: "Птичий Загон" },
+            { x: 24,  z: -18, w: 8, h: 6.5, d: 6, col: 0x3e2723, rCol: 0x5f0909, name: "Зерновой Амбар" },
+            { x: 0,   z: -36, w: 5.5, h: 9.5, d: 5.5, col: 0x546e7a, rCol: 0x263238, name: "Ветряная мельница" }
+        ];
+    </script>
+</body>
+</html>
